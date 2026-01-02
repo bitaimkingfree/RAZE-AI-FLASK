@@ -4,14 +4,8 @@ import requests
 app = Flask(__name__)
 
 # ==========================================
-# CONFIGURATION
-# ==========================================
-API_KEY = "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"
-BASE_URL = "https://openrouter.ai/api/v1/chat/completions"
-MODEL = "openai/gpt-4o-mini"
-
-# ==========================================
 # HTML TEMPLATE (Frontend)
+# FIX: Added 'r' prefix (Raw String) to fix SyntaxWarning
 # ==========================================
 HTML_TEMPLATE = r'''
 <!DOCTYPE html>
@@ -111,7 +105,7 @@ HTML_TEMPLATE = r'''
             width: 44px; height: 44px; border-radius: 12px; border: none; background: var(--surface);
             display: flex; align-items: center; justify-content: center; cursor: pointer; color: var(--text-secondary);
             transition: transform 0.1s;
-            z-index: 10;
+            z-index: 10; /* Fix: Ensure clickable */
         }
         .icon-btn:active { transform: scale(0.95); }
         .icon-btn ion-icon { font-size: 22px; pointer-events: none; }
@@ -202,7 +196,7 @@ HTML_TEMPLATE = r'''
             background: var(--surface); border: 1px solid var(--border);
             border-radius: 20px; display: flex; align-items: flex-end; padding: 12px 18px;
             box-shadow: 0 2px 8px var(--shadow);
-            position: relative;
+            position: relative; /* Context for z-index */
         }
         #chat-input {
             flex: 1; background: transparent; border: none; color: var(--text);
@@ -215,14 +209,15 @@ HTML_TEMPLATE = r'''
             width: 40px; height: 40px; border-radius: 20px; border: none;
             background: var(--user-bubble); color: #fff; display: flex; align-items: center; justify-content: center;
             cursor: pointer; transition: transform 0.1s, opacity 0.2s, box-shadow 0.2s;
-            z-index: 5;
-            padding: 0;
-            opacity: 0.5;
+            z-index: 5; /* FIX: Ensure it sits on top */
+            padding: 0; /* Reset padding */
+            opacity: 0.5; /* Default dull state */
         }
         
+        /* FIX: Glow Effect Class */
         .send-btn.active-glow {
             opacity: 1;
-            box-shadow: 0 0 15px rgba(37, 99, 235, 0.6);
+            box-shadow: 0 0 15px rgba(37, 99, 235, 0.6); /* Blue Glow */
             transform: scale(1.05);
         }
 
@@ -235,6 +230,7 @@ HTML_TEMPLATE = r'''
             transform: scale(1);
         }
         
+        /* FIX: Wrapper div to prevent icon from stopping clicks */
         .icon-wrapper {
             width: 100%; height: 100%; display: flex; align-items: center; justify-content: center;
             pointer-events: none; 
@@ -322,6 +318,7 @@ HTML_TEMPLATE = r'''
         .setting-check { width: 24px; height: 24px; border-radius: 12px; background: var(--user-bubble); display: flex; align-items: center; justify-content: center; }
         .setting-check ion-icon { color: #fff; font-size: 16px; }
 
+        .modal-actions { display: flex; gap: 12px; }
         .modal-btn {
             flex: 1; padding: 16px; border-radius: 12px; border: none; font-size: 16px; font-weight: 600;
             cursor: pointer; text-align: center; transition: opacity 0.2s;
@@ -360,7 +357,7 @@ HTML_TEMPLATE = r'''
                     <ion-icon name="sparkles" style="font-size: 32px; color: #fff;"></ion-icon>
                 </div>
                 <h1 class="empty-title">Raze AI</h1>
-                <p class="empty-subtitle">Memorable AI that helps you code, create APIs, and solve problems.</p>
+                <p class="empty-subtitle">Chat with AI and get instant responses with code support.</p>
             </div>
             <div id="messages-list" style="display: none;"></div>
         </div>
@@ -369,6 +366,7 @@ HTML_TEMPLATE = r'''
         <div class="input-area-container">
             <div class="input-wrapper">
                 <textarea id="chat-input" placeholder="Type your message..." rows="1"></textarea>
+                <!-- FIX: Added onclick directly to button and icon wrapper -->
                 <button class="send-btn" id="send-btn" disabled onclick="handleSend()">
                     <div class="icon-wrapper">
                         <ion-icon name="arrow-up" id="send-icon"></ion-icon>
@@ -425,7 +423,7 @@ HTML_TEMPLATE = r'''
     <script>
         /* STATE */
         let state = {
-            messages: [], // Stores objects: { role: 'user'|'assistant', content: '...' }
+            messages: [],
             inputText: '',
             isLoading: false,
             theme: 'dark', 
@@ -436,9 +434,11 @@ HTML_TEMPLATE = r'''
 
         /* DOM ELEMENTS */
         const el = {
+            app: document.getElementById('app'),
             body: document.body,
             input: document.getElementById('chat-input'),
             sendBtn: document.getElementById('send-btn'),
+            sendIcon: document.getElementById('send-icon'),
             chatList: document.getElementById('messages-list'),
             emptyState: document.getElementById('empty-state'),
             container: document.getElementById('chat-container'),
@@ -454,20 +454,29 @@ HTML_TEMPLATE = r'''
             loadTheme();
             loadChatSessions();
             
+            // Keypress listener for Enter key
             el.input.addEventListener('keydown', (e) => {
                 if (e.key === 'Enter' && !e.shiftKey) {
                     e.preventDefault();
-                    if (!el.sendBtn.disabled) handleSend();
+                    if (!el.sendBtn.disabled) {
+                        handleSend();
+                    }
                 }
             });
 
             el.input.addEventListener('input', (e) => {
                 state.inputText = e.target.value;
                 autoResizeInput();
+                
+                // FIX: Glow Effect Logic
                 const hasText = state.inputText.trim().length > 0;
                 el.sendBtn.disabled = !hasText;
-                if (hasText) el.sendBtn.classList.add('active-glow');
-                else el.sendBtn.classList.remove('active-glow');
+                
+                if (hasText) {
+                    el.sendBtn.classList.add('active-glow');
+                } else {
+                    el.sendBtn.classList.remove('active-glow');
+                }
             });
             
             document.getElementById('menu-btn').addEventListener('click', toggleSidebar);
@@ -476,8 +485,8 @@ HTML_TEMPLATE = r'''
             el.sidebarOverlay.addEventListener('click', toggleSidebar);
         }
 
-        /* API LOGIC */
-        async function handleSend() {
+        /* API LOGIC (Global Window Function) */
+        window.handleSend = async function() {
             if (!state.inputText.trim()) return;
 
             const userText = state.inputText.trim();
@@ -485,39 +494,37 @@ HTML_TEMPLATE = r'''
             state.inputText = '';
             autoResizeInput();
             el.sendBtn.disabled = true;
-            el.sendBtn.classList.remove('active-glow');
+            el.sendBtn.classList.remove('active-glow'); // Remove glow after sending
 
-            // 1. User Message
-            const userMsgObj = { role: "user", content: userText };
-            state.messages.push(userMsgObj);
-            addMessageToUI(userMsgObj);
+            // User Message
+            const userMsg = { id: Date.now().toString(), text: userText, isUser: true, timestamp: new Date() };
+            addMessageToUI(userMsg);
+            state.messages.push(userMsg);
 
-            // 2. AI Placeholder
-            const aiMsgObj = { role: "assistant", content: "" };
-            state.messages.push(aiMsgObj); // Push immediately to reserve order in history
-            addMessageToUI(aiMsgObj);
+            // AI Placeholder
+            const aiMsg = { id: (Date.now() + 1).toString(), text: '', isUser: false, timestamp: new Date() };
+            addMessageToUI(aiMsg);
+            state.messages.push(aiMsg);
             scrollToBottom();
 
             state.isLoading = true;
             updateStreamingUI(true);
 
             try {
-                // Send entire history to backend for "Memory"
+                // Request to local Flask API
                 const response = await fetch('/api/chat', {
                     method: 'POST',
                     headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ history: state.messages })
+                    body: JSON.stringify({ prompt: userText })
                 });
                 
-                if (!response.ok) throw new Error('Network response was not ok');
                 const data = await response.json();
-                const replyText = data.reply || "No response generated.";
                 
-                // Update UI
+                // Extract reply from local API response
+                const replyText = data.reply || "Sorry, I couldn't get a response.";
+
                 updateLastMessage(replyText);
-                
-                // Update State
-                state.messages[state.messages.length - 1].content = replyText;
+                state.messages[state.messages.length-1].text = replyText;
                 
                 state.isLoading = false;
                 updateStreamingUI(false);
@@ -525,20 +532,19 @@ HTML_TEMPLATE = r'''
 
             } catch (error) {
                 console.error(error);
-                updateLastMessage("Error: Failed to connect to Raze AI.");
+                updateLastMessage("Error: Failed to connect to the server.");
                 state.isLoading = false;
                 updateStreamingUI(false);
             }
         };
 
         function updateLastMessage(text) {
-            // Find the last message bubble (which is the AI one we just added)
-            const bubbles = el.chatList.getElementsByClassName('message-content');
-            if (bubbles.length > 0) {
-                const lastBubble = bubbles[bubbles.length - 1];
-                lastBubble.innerHTML = renderMainContent(text);
+            const msgEl = document.getElementById(`msg-${state.messages[state.messages.length-1].id}`);
+            if (msgEl) {
+                const contentDiv = msgEl.querySelector('.message-content');
+                contentDiv.innerHTML = renderMainContent(text);
+                scrollToBottom();
             }
-            scrollToBottom();
         }
 
         function updateStreamingUI(isLoading) {
@@ -546,28 +552,35 @@ HTML_TEMPLATE = r'''
                 el.streamingStatus.classList.add('active');
                 el.sendBtn.style.background = '#666'; 
                 el.sendBtn.disabled = true;
+                el.sendBtn.classList.remove('active-glow');
             } else {
                 el.streamingStatus.classList.remove('active');
                 el.sendBtn.style.background = '';
                 el.sendBtn.disabled = !state.inputText.trim();
-                if(state.inputText.trim().length > 0) el.sendBtn.classList.add('active-glow');
+                if(state.inputText.trim().length > 0) {
+                    el.sendBtn.classList.add('active-glow');
+                }
             }
         }
 
         /* MARKDOWN PARSING */
         function renderMainContent(text) {
-            if (!text) return '<span style="color:var(--text-tertiary);">...</span>';
             const codeRegex = /```(\w*)\n?([\s\S]*?)```/g;
             const parts = [];
             let lastIndex = 0;
             let match;
             let codeIndex = 0;
+
             while ((match = codeRegex.exec(text)) !== null) {
-                if (match.index > lastIndex) parts.push(parseInlineMarkdown(text.slice(lastIndex, match.index)));
+                if (match.index > lastIndex) {
+                    parts.push(parseInlineMarkdown(text.slice(lastIndex, match.index)));
+                }
                 parts.push(renderCodeBlock(match[1], match[2].trim(), codeIndex++));
                 lastIndex = match.index + match[0].length;
             }
-            if (lastIndex < text.length) parts.push(parseInlineMarkdown(text.slice(lastIndex)));
+            if (lastIndex < text.length) {
+                parts.push(parseInlineMarkdown(text.slice(lastIndex)));
+            }
             return parts.join('');
         }
 
@@ -593,12 +606,18 @@ HTML_TEMPLATE = r'''
                         </button>
                     </div>
                     <pre class="code-content">${escapeHtml(code)}</pre>
-                </div>`;
+                </div>
+            `;
         }
 
         function escapeHtml(text) {
             if (!text) return '';
-            return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+            return text
+                .replace(/&/g, "&amp;")
+                .replace(/</g, "&lt;")
+                .replace(/>/g, "&gt;")
+                .replace(/"/g, "&quot;")
+                .replace(/'/g, "&#039;");
         }
 
         async function copyCode(btn) {
@@ -621,24 +640,34 @@ HTML_TEMPLATE = r'''
             el.chatList.style.display = 'block';
             
             const div = document.createElement('div');
-            div.className = `message-row ${msg.role === 'user' ? 'user' : 'ai'}`;
+            div.className = `message-row ${msg.isUser ? 'user' : 'ai'}`;
+            div.id = `msg-${msg.id}`;
             
             let avatarHtml = '';
-            if (msg.role !== 'user') {
-                avatarHtml = `<div class="ai-avatar"><ion-icon name="sparkles" style="color:var(--text-secondary);"></ion-icon></div>`;
+            if (!msg.isUser) {
+                avatarHtml = `
+                    <div class="ai-avatar">
+                        <ion-icon name="sparkles" style="color:var(--text-secondary);"></ion-icon>
+                    </div>
+                `;
             }
 
             div.innerHTML = `
                 ${avatarHtml}
                 <div class="message-bubble">
                     <div class="message-content">
-                        ${msg.content ? renderMainContent(msg.content) : '<span style="color:var(--text-tertiary);">...</span>'}
+                        ${msg.text ? renderMainContent(msg.text) : '<span style="color:var(--text-tertiary);">...</span>'}
                     </div>
-                </div>`;
+                </div>
+            `;
+            
             el.chatList.appendChild(div);
         }
 
-        function scrollToBottom() { el.container.scrollTop = el.container.scrollHeight; }
+        function scrollToBottom() {
+            el.container.scrollTop = el.container.scrollHeight;
+        }
+
         function autoResizeInput() {
             el.input.style.height = 'auto';
             el.input.style.height = el.input.scrollHeight + 'px';
@@ -678,12 +707,14 @@ HTML_TEMPLATE = r'''
                         <div class="history-date">${new Date(session.createdAt).toLocaleDateString()}</div>
                     </div>
                     <ion-icon name="chevron-forward"></ion-icon>
-                </div>`).join('');
+                </div>
+            `).join('');
         }
 
         function loadSession(id) {
             const session = state.chatSessions.find(s => s.id === id);
             if (!session) return;
+
             state.messages = session.messages || [];
             state.currentSessionId = session.id;
             
@@ -693,17 +724,22 @@ HTML_TEMPLATE = r'''
                 el.chatList.style.display = 'block';
                 state.messages.forEach(msg => {
                     const div = document.createElement('div');
-                    div.className = `message-row ${msg.role === 'user' ? 'user' : 'ai'}`;
-                    let avatarHtml = '';
-                    if (msg.role !== 'user') avatarHtml = `<div class="ai-avatar"><ion-icon name="sparkles" style="color:var(--text-secondary);"></ion-icon></div>`;
+                    div.className = `message-row ${msg.isUser ? 'user' : 'ai'}`;
+                    div.id = `msg-${msg.id}`;
                     
+                    let avatarHtml = '';
+                    if (!msg.isUser) {
+                        avatarHtml = `<div class="ai-avatar"><ion-icon name="sparkles" style="color:var(--text-secondary);"></ion-icon></div>`;
+                    }
+
                     div.innerHTML = `
                         ${avatarHtml}
                         <div class="message-bubble">
                             <div class="message-content">
-                                ${renderMainContent(msg.content)}
+                                ${renderMainContent(msg.text)}
                             </div>
-                        </div>`;
+                        </div>
+                    `;
                     el.chatList.appendChild(div);
                 });
             } else {
@@ -724,27 +760,34 @@ HTML_TEMPLATE = r'''
             state.theme = themeName;
             el.body.setAttribute('data-theme', themeName);
             localStorage.setItem('raze_theme', themeName);
+            
             document.getElementById('check-dark').style.display = themeName === 'dark' ? 'flex' : 'none';
             document.getElementById('check-light').style.display = themeName === 'light' ? 'flex' : 'none';
         }
 
         function toggleSettings() {
             const isOpen = el.settingsModal.classList.contains('open');
-            el.settingsModal.classList.toggle('open');
-            if (!isOpen) setTheme(state.theme);
+            if (isOpen) {
+                el.settingsModal.classList.remove('open');
+            } else {
+                el.settingsModal.classList.add('open');
+                setTheme(state.theme);
+            }
         }
 
         function loadChatSessions() {
             try {
                 const stored = localStorage.getItem('raze_sessions');
-                if (stored) state.chatSessions = JSON.parse(stored);
+                if (stored) {
+                    state.chatSessions = JSON.parse(stored);
+                }
             } catch (e) { console.error(e); }
         }
 
         function saveCurrentSession() {
             if (state.messages.length === 0) return;
-            const firstUserMsg = state.messages.find(m => m.role === 'user');
-            const sessionName = firstUserMsg ? (firstUserMsg.content.substring(0, 30) + '...') : 'New Chat';
+
+            const sessionName = state.messages[0].text.substring(0, 30) + '...';
             
             if (state.currentSessionId) {
                 const idx = state.chatSessions.findIndex(s => s.id === state.currentSessionId);
@@ -762,6 +805,7 @@ HTML_TEMPLATE = r'''
                 state.chatSessions.unshift(newSession);
                 state.currentSessionId = newSession.id;
             }
+
             localStorage.setItem('raze_sessions', JSON.stringify(state.chatSessions));
         }
 
@@ -791,56 +835,36 @@ def home():
 def chat():
     try:
         data = request.json
-        # Frontend sends the full history
-        history = data.get('history', [])
+        user_prompt = data.get('prompt')
+
+        if not user_prompt:
+            return jsonify({'reply': 'No prompt provided'}), 400
+
+        # External API URL
+        external_api_url = f"https://claudeai.anshppt19.workers.dev/api/chat?prompt={user_prompt}"
         
-        if not history:
-            return jsonify({'reply': 'No history provided'}), 400
-
-        # Define System Prompt for Raze AI
-        system_message = {
-            "role": "system",
-            "content": (
-                "You are Raze AI, a smart assistant that helps users "
-                "create APIs, develop tools, and solve programming problems. "
-                "You remember the entire conversation and provide clear, step-by-step guidance."
-            )
-        }
-
-        # Construct Payload for OpenRouter
-        # Prepend system message to the user history
-        messages_payload = [system_message] + history
-
-        payload = {
-            "model": MODEL,
-            "messages": messages_payload
-        }
-
-        headers = {
-            "Authorization": f"Bearer {API_KEY}",
-            "Content-Type": "application/json",
-            "HTTP-Referer": "http://localhost:5000", 
-            "X-Title": "Raze AI"
-        }
-
-        # Call OpenRouter API
-        res = requests.post(BASE_URL, headers=headers, json=payload, timeout=30)
+        # Making request (This fixes the CORS Error)
+        response = requests.get(external_api_url)
         
-        if res.status_code == 200:
-            api_data = res.json()
-            reply_text = api_data["choices"][0]["message"]["content"]
-            return jsonify({'reply': reply_text})
-        elif res.status_code == 402:
-            return jsonify({'reply': 'Error: Payment Required. Your API key does not have access to this model.'}), 402
+        if response.status_code == 200:
+            api_data = response.json()
+            
+            # Extracts the 'reply' field specifically
+            reply_text = api_data.get('reply')
+            
+            if reply_text:
+                return jsonify({'reply': reply_text})
+            else:
+                return jsonify({'reply': 'Sorry, the API returned an empty response.'})
         else:
-            return jsonify({'reply': f'Error: API returned status code {res.status_code}'}), res.status_code
+            return jsonify({'reply': f'Error: API returned status code {response.status_code}'}), 500
 
-    except requests.exceptions.RequestException as e:
-        print(f"Network Error: {e}")
-        return jsonify({'reply': 'Error: Failed to connect to the AI service.'}), 500
     except Exception as e:
-        print(f"Server Error: {e}")
+        print(f"Error: {e}")
         return jsonify({'reply': 'Internal Server Error'}), 500
 
 if __name__ == '__main__':
     app.run(debug=True, port=5000)
+
+# Expose app for Vercel
+app = app
